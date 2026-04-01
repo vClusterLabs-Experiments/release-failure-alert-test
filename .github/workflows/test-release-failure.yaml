@@ -1,0 +1,140 @@
+name: Test Release Failure Alert
+
+# Simulates the loft-enterprise release.yaml job chain to verify
+# that notify_failure triggers correctly when an upstream job fails.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_job:
+        description: "Which job should fail (none, get_version, package, sync_api, sync_loft)"
+        required: true
+        default: "sync_api"
+        type: choice
+        options:
+          - none
+          - get_version
+          - package
+          - sync_api
+          - sync_loft
+
+jobs:
+  get_version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: "v4.7.2-rc.1"
+    steps:
+      - name: Simulate get_version
+        run: |
+          echo "Simulating version resolution..."
+          if [ "${{ inputs.fail_job }}" = "get_version" ]; then
+            echo "Simulated failure in get_version"
+            exit 1
+          fi
+          echo "version=v4.7.2-rc.1"
+
+  package:
+    needs: [get_version]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate package
+        run: |
+          echo "Simulating package build for ${{ needs.get_version.outputs.version }}..."
+          sleep 2
+          if [ "${{ inputs.fail_job }}" = "package" ]; then
+            echo "Simulated failure in package (e.g. goreleaser timeout)"
+            exit 1
+          fi
+          echo "Package complete"
+
+  sync_agentapi:
+    needs: [get_version, package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate sync agentapi
+        run: echo "Synced agentapi"
+
+  sync_api:
+    needs: [get_version, package, sync_agentapi]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate sync api
+        run: |
+          echo "Simulating sync api (Fix go.mod)..."
+          if [ "${{ inputs.fail_job }}" = "sync_api" ]; then
+            echo "Simulated failure: transient gonum dependency error"
+            exit 1
+          fi
+          echo "Synced api"
+
+  sync_loft:
+    needs: [get_version, package, sync_agentapi, sync_api]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate sync loft
+        run: |
+          if [ "${{ inputs.fail_job }}" = "sync_loft" ]; then
+            echo "Simulated failure in sync_loft"
+            exit 1
+          fi
+          echo "Synced loft"
+
+  sync_js_client:
+    needs: [get_version, package]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate sync js client
+        run: echo "Synced js client"
+
+  sync_linear:
+    needs:
+      - get_version
+      - package
+      - sync_agentapi
+      - sync_api
+      - sync_loft
+      - sync_js_client
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate sync linear
+        run: echo "Linear issues updated"
+
+  notify_release:
+    needs:
+      - get_version
+      - package
+      - sync_agentapi
+      - sync_api
+      - sync_loft
+      - sync_js_client
+      - sync_linear
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate success notification
+        run: echo "Would post success to #product-releases"
+
+  # This is the job under test — should trigger when any upstream job fails
+  notify_failure:
+    if: ${{ failure() }}
+    needs:
+      - get_version
+      - package
+      - sync_agentapi
+      - sync_api
+      - sync_loft
+      - sync_js_client
+      - sync_linear
+      - notify_release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Alert release failure
+        run: |
+          echo "::error::ALERT: Release pipeline failed!"
+          echo ""
+          echo "=== Slack notification would be sent ==="
+          echo "Channel: #product-releases"
+          echo "Product: vCluster Platform (test)"
+          echo "Version: ${{ needs.get_version.outputs.version }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "========================================="
