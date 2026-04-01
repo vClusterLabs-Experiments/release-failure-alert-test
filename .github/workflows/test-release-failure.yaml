@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Simulate success notification
-        run: echo "Would post success to #product-releases"
+        run: echo "Would post success to product-releases channel"
 
   # This is the job under test — should trigger when any upstream job fails
   notify_failure:
