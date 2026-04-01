@@ -115,7 +115,7 @@ jobs:
 
   # This is the job under test — should trigger when any upstream job fails
   notify_failure:
-    if: ${{ failure() }}
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
     needs:
       - get_version
       - package
